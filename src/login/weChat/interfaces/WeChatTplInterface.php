@@ -6,13 +6,11 @@
  * Time: 下午4:35
  */
 
-namespace share\share\weChat\interfaces;
+namespace tpl\login\weChat\interfaces;
 
+use tpl\login\interfaces\TplInterface;
 
-
-use tpl\login\interfaces\ShareInterface;
-
-interface WeChatTplInterface extends ShareInterface
+interface WeChatTplInterface extends TplInterface
 {
 
 }

@@ -8,20 +8,19 @@
 
 namespace tpl\login\weChat\login;
 
-use share\enum\ShareResultEnum;
-use share\share\weChat\abstracts\WeChatConfigAbstract;
-use share\share\weChat\interfaces\WeChatShareInterface;
 use thl\common\CurlTool;
 use thl\common\ResultUtil;
-use thl\common\StringTool;
 use thl\common\YmlTool;
 use thl\entity\ThlResult;
-use thl\enum\ThlRandomTypeEnum;
 use thl\enum\ThlResultEnum;
-use thl\exception\ThlResultException;
 use thl\ThlBase;
+use tpl\enum\TplResultEnum;
+use tpl\enum\WechatParEnum;
+use tpl\Exception\TplException;
+use tpl\login\weChat\abstracts\WeChatConfigAbstract;
+use tpl\login\weChat\interfaces\WeChatTplInterface;
 
-class WechatLogin extends ThlBase implements WeChatShareInterface
+class WechatLogin extends ThlBase implements WeChatTplInterface
 {
 
     /**
@@ -30,25 +29,26 @@ class WechatLogin extends ThlBase implements WeChatShareInterface
     protected static $weChatConfig = null;
 
     /**
-     * @var null
+     * @var  null
      */
-    protected static $wechatUrlConfig = null;
+    protected static $tplUrlConfig = null;
 
     /**
-     * ThlWechatShare constructor.
+     * WechatLogin constructor.
      * @param $weChatConfig
+     * @throws TplException
      * @throws \thl\exception\ThlResultException
      */
-    public function __construct($weChatConfig)
+    function __construct($weChatConfig)
     {
         parent::__construct();
         if (empty(self::$weChatConfig)){
             self::$weChatConfig = $weChatConfig;
         }
 
-        self::$wechatUrlConfig = YmlTool::getParameters("wechat","share/config/shareUrlConfig.yml");
-        if (empty(self::$wechatUrlConfig)){
-            throw new ThlResultException(
+        self::$tplUrlConfig = YmlTool::getParameters("wechat","tpl/config/tplUrlConfig.yml");
+        if (empty(self::$tplUrlConfig)){
+            throw new TplException(
                 ThlResultEnum::PARAM_PARSE_ERROR_CODE,
                 ThlResultEnum::PARAM_PARSE_ERROR_MSG
             );
@@ -56,93 +56,162 @@ class WechatLogin extends ThlBase implements WeChatShareInterface
     }
 
     /**
-     * @return ThlResult
-     * @throws ThlResultException
+     * @param $redirect_url
+     * @param $scope
+     * @param $state
+     * @return string|ThlResult
      */
-    public function getAccessToken(){
-        $app_id = self::$weChatConfig->getWechatAppId();
-        $secret = self::$weChatConfig->getWechatAppSecret();
+    public function getAuthorizationRoute($redirect_url, $scope, $state)
+    {
+        //授权后重定向的回调链接地址
+        $redirect_url = urlencode($redirect_url);
 
-        if (!isset(self::$wechatUrlConfig['get_access_token_url'])){
-            throw new ThlResultException(
-                ThlResultEnum::PARAM_PARSE_ERROR_CODE,
-                ThlResultEnum::PARAM_PARSE_ERROR_MSG
+        //设置第三方授权接口参数
+        $appid = self::$weChatConfig->getWechatAppId();
+        $response_type = 'code';
+
+        //拼接url
+        if (!isset(self::$tplUrlConfig['get_code_url'])){
+            return new ThlResult(
+                TPlResultEnum::NO_URL_IN_YML_ERROR_CODE,
+                TPlResultEnum::NO_URL_IN_YML_ERROR_MSG
             );
         }
 
-        $url =  self::$wechatUrlConfig['get_access_token_url'];
-        $res = CurlTool::httpGet($url."?grant_type=client_credential&appid={$app_id}&secret={$secret}");
-        $access_token_res = json_decode($res, true);
+
+        return self::$tplUrlConfig['get_code_url']."?appid=$appid&redirect_uri=$redirect_url&response_type=$response_type&scope=$scope&state=$state#wechat_redirect";
+    }
+
+    /**
+     * @param $redirect_url
+     * @param $scope
+     * @param $state
+     * @return ThlResult
+     */
+    public function getCodeAndState($redirect_url, $scope, $state)
+    {
+        if(!isset($_GET['state']) || !isset($_GET['code'])){
+            $url = $this->getAuthorizationRoute($redirect_url, $scope, $state);
+            Header("Location:{$url}");exit;
+        }
+
+        return ResultUtil::success(array('state'=>$_GET['state'],"code"=>$_GET['code']));
+    }
+
+    /**
+     * @param $code
+     * @return ThlResult
+     */
+    public function getAccessTokenByCode($code)
+    {
+        //获取配置参数
+        $app_id = self::$weChatConfig->getWechatAppId();;
+        $secret = self::$weChatConfig->getWechatAppSecret();
+        $grant_type = WechatParEnum::GRANT_TYPE;
+
+        //判断code
+        if(empty($code)){
+            return new ThlResult(TplResultEnum::NO_CODE_ERROR_MSG,TplResultEnum::NO_CODE_ERROR_CODE);
+        }
+
+        //请求微信
+        if (!isset(self::$tplUrlConfig['get_access_token_url'])){
+            return new ThlResult(
+                TPlResultEnum::NO_URL_IN_YML_ERROR_CODE,
+                TPlResultEnum::NO_URL_IN_YML_ERROR_MSG
+            );
+        }
+        $url = self::$tplUrlConfig['get_access_token_url']."?appid=$app_id&secret=$secret&code=$code&grant_type=$grant_type";
+        $access_token_res = json_decode(CurlTool::httpGet($url), true);
 
         return $this->returnRewrite($access_token_res);
     }
 
     /**
-     * @param $access_token
+     * @param $redirect_url
+     * @param string $state
      * @return ThlResult
-     * @throws ThlResultException
      */
-    public function getTicket($access_token)
+    public function getUserInfo($redirect_url, $state = '')
     {
-        if (!isset(self::$wechatUrlConfig['get_ticket_url'])){
-            throw new ThlResultException(
-                ThlResultEnum::PARAM_PARSE_ERROR_CODE,
-                ThlResultEnum::PARAM_PARSE_ERROR_MSG
-            );
+        $res = $this->getCodeAndState($redirect_url,$scope = WechatParEnum::SNSAPI_USERINFO,$state);
+        $data = $res->getData();
+        if (!isset($data['code'])){
+            return new ThlResult(TplResultEnum::NO_CODE_ERROR_MSG,TplResultEnum::NO_CODE_ERROR_MSG);
         }
 
-        $url = self::$wechatUrlConfig['get_ticket_url'];
-        $res = CurlTool::httpGet($url."?access_token={$access_token}&type=jsapi");
-        $ticket = json_decode($res, true);
-
-        return $this->returnRewrite($ticket);;
+        return $this->getUserInfoByCode($data['code']);
     }
 
     /**
-     * @param $url
+     * @param $code
      * @return ThlResult
-     * @throws ThlResultException
      */
-    public function shareParameter($url)
+    public function getUserInfoByCode($code)
     {
-        //用于分享的参数
-        $time_stamp = time();
-        $nonce_str = StringTool::generateRandom(ThlRandomTypeEnum::RANDOM_CAPTCHA,6);
-
-        //获取access_token
-        $access_token_res = $this->getAccessToken();
-        if ($access_token_res->getCode() != ThlResultEnum::SUCCESS_CODE){
-            return $access_token_res;
+        if (empty($code)){
+            return new ThlResult(TplResultEnum::NO_CODE_ERROR_MSG,TplResultEnum::NO_CODE_ERROR_CODE);
         }
 
+        $access_token_res = $this->getAccessTokenByCode($code);
         $access_token_data = $access_token_res->getData();
-        if (!isset($access_token_data['access_token'])){
+        if (isset($access_token_data['access_token']) || isset($access_token_data['openid'])){
             return new ThlResult(
-                ShareResultEnum::WECHART_NO_ACCESS_TOKEN_MSG,
-                ShareResultEnum::WECHART_NO_ACCESS_TOKEN_CODE
+                TPlResultEnum::NO_ACCESS_TOKEN_OPENID_ERROR_CODE,
+                TPlResultEnum::NO_ACCESS_TOKEN_OPENID_ERROR_MSG
             );
         }
 
-        //获取临时票据
-        $ticket_res = $this->getTicket($access_token_data['access_token']);
-        if($ticket_res->getCode() != ThlResultEnum::SUCCESS_CODE){
-            return $ticket_res;
+        $access_token = $access_token_data['access_token'];
+        $open_id = $access_token_data['openid'];
+
+        if (!isset(self::$tplUrlConfig['get_user_info_url'])){
+            return new ThlResult(
+                TPlResultEnum::NO_URL_IN_YML_ERROR_CODE,
+                TPlResultEnum::NO_URL_IN_YML_ERROR_MSG
+            );
         }
 
-        $ticket_data = $ticket_res->getData();
-        $string = "jsapi_ticket={$ticket_data['ticket']}&noncestr={$nonce_str}&timestamp={$time_stamp}&url=" . $url;
+        $url = self::$tplUrlConfig['get_user_info_url']."?access_token=$access_token&openid=$open_id";
 
-        $signature = sha1($string);
+        //请求微信
+        $user_info = json_decode(CurlTool::httpGet($url), true);
 
-        $data = array(
-            'url' => $url,
-            'nonce_str' => $nonce_str,
-            'time_stamp'=> $time_stamp,
-            'app_id'=> self::$weChatConfig->getWechatAppId(),
-            'signature'=> $signature
-            );
+        //数据判断
+        if(!is_array($user_info) || empty($user_info)){
 
-        return new ThlResult(ThlResultEnum::SUCCESS_MSG,ThlResultEnum::SUCCESS_CODE,$data);
+        }
+
+        return ResultUtil::success($user_info);
+    }
+
+    /**
+     * @param $redirect_url
+     * @param string $state
+     * @return ThlResult
+     */
+    public function getOpenId($redirect_url, $state = '')
+    {
+        $res = $this->getCodeAndState($redirect_url,WechatParEnum::SNSAPI_BASE,$state);
+        $data = $res->getData();
+        if (!isset($data['code'])){
+            return new ThlResult(TplResultEnum::NO_CODE_ERROR_MSG,TplResultEnum::NO_CODE_ERROR_MSG);
+        }
+
+        return $this->getOpenIdByCode($data['code']);
+    }
+
+    /**
+     * @param $code
+     * @return ThlResult
+     */
+    public function getOpenIdByCode($code)
+    {
+        if (empty($code)){
+            return new ThlResult(TplResultEnum::NO_CODE_ERROR_MSG,TplResultEnum::NO_CODE_ERROR_CODE);
+        }
+
+        return $this->getAccessTokenByCode($code);
     }
 
 
@@ -215,7 +284,7 @@ class WechatLogin extends ThlBase implements WeChatShareInterface
 
         return new ThlResult(
             "message:{$message},WXerrcode:{$result['errcode']},WXErrmsg:{$result['errmsg']}",
-            $errCode
+            ThlResultEnum::ERROR_CODE
         );
     }
 }
