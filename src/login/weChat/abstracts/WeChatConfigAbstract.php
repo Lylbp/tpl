@@ -15,4 +15,6 @@ abstract class WeChatConfigAbstract
     public abstract function getWechatAppSecret();
     public abstract function getWechatMerchantKey();
     public abstract function getWechatMerchantId();
+    public abstract function getAppletAppId();
+    public abstract function getAppletAppSecret();
 }
