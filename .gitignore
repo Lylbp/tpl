@@ -1,6 +1,8 @@
 #Composer
 /composer.phar
 /composer.lock
+/composer.json
+/vendor
 
 #测试
 /src/test
