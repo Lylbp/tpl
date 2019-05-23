@@ -1,0 +1,26 @@
+{
+    "name": "lylbp/tpl",
+    "description": "三方登录组件",
+    "license": "MIT",
+    "type": "library",
+    "homepage": "https://github.com/Lylbp/tpl",
+    "keywords": [
+        "thl", "wechat", "ali"
+    ],
+    "authors": [
+        {
+            "name": "weiwenbin",
+            "email": "849059064@qq.com",
+            "role": "Developer"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "tpl\\": ["", "src"]
+        }
+    },
+    "require": {
+        "php": ">=5.3.9",
+        "lylbp/thl": "v1.1.0"
+    }
+}

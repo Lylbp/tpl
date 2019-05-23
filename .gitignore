@@ -1,0 +1,14 @@
+#Composer
+/composer.phar
+/composer.lock
+
+#测试
+/src/test
+test.php
+
+# Intellij
+.idea
+*.iml
+*.ipr
+*.iws
+*.git
