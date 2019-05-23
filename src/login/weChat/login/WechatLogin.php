@@ -46,7 +46,8 @@ class WechatLogin extends ThlBase implements WeChatTplInterface
             self::$weChatConfig = $weChatConfig;
         }
 
-        self::$tplUrlConfig = YmlTool::getParameters("wechat","tpl/config/tplUrlConfig.yml");
+
+        self::$tplUrlConfig = YmlTool::getParameters("wechat",dirname(dirname(dirname(dirname(__dir__))))."/config/tplUrlConfig.yml");
         if (empty(self::$tplUrlConfig)){
             throw new TplException(
                 ThlResultEnum::PARAM_PARSE_ERROR_CODE,

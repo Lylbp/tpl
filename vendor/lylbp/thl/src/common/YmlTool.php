@@ -23,14 +23,12 @@ class YmlTool
      * @throws ThlResultException
      */
     public static function getParameters($key,$ymlPath = ''){
-        $documentRoot = $_SERVER['DOCUMENT_ROOT'];
         $params = null;
         try {
             if (empty($ymlPath)){
-                $ymlPath = 'thl/config/thlConfig.yml';
+                $ymlPath = dirname(dirname(__dir__)).'/config/thlConfig.yml';
             }
-            $params = Yaml::parse($documentRoot. '/'.$ymlPath);
-
+            $params = Yaml::parse($ymlPath);
             if (!is_array($params)){
                 throw new ThlResultException(
                     ThlResultEnum::PARAM_PARSE_ERROR_CODE,
