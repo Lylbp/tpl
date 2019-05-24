@@ -33,7 +33,7 @@ class AppletLogin extends WechatLogin
                 TPlResultEnum::NO_URL_IN_YML_ERROR_MSG
             );
         }
-        $url = self::$tplUrlConfig['js_code_to_session_url']."appid={$applet_app_id}&secret={$applet_app_secret}&js_code={$code}&grant_type={$grant_type}";
+        $url = self::$tplUrlConfig['js_code_to_session_url']."?appid={$applet_app_id}&secret={$applet_app_secret}&js_code={$code}&grant_type={$grant_type}";
         $res = json_decode(CurlTool::httpGet($url),true);
 
         return $this->returnRewrite($res);
